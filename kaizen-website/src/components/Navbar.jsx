@@ -30,6 +30,7 @@ export default function Navbar() {
     { name: 'Shop', path: '/shop' },
     { name: 'Collections', path: '/shop' },
     { name: 'Custom & Bulk', path: '/custom-bulk' },
+    { name: 'Design Services', path: '/design-enquiry', highlight: true },
     { name: 'About', path: '/about' },
   ]
 
@@ -75,30 +76,32 @@ export default function Navbar() {
               to={link.path}
               className="navbar__link"
               id={`nav-link-${link.name.toLowerCase().replace(/ & | /g, '-')}`}
+              style={link.highlight ? {
+                display: 'inline-flex', alignItems: 'center', gap: '0.4rem',
+                padding: '0.4rem 1rem', borderRadius: 8,
+                background: 'rgba(58,111,247,0.1)',
+                border: '1px solid rgba(58,111,247,0.35)',
+                color: '#3A6FF7', fontSize: '0.82rem', fontWeight: 700,
+                letterSpacing: '0.04em', whiteSpace: 'nowrap',
+              } : {}}
+              onMouseEnter={e => {
+                if (link.highlight) {
+                  e.currentTarget.style.background = 'rgba(58,111,247,0.2)';
+                  e.currentTarget.style.color = '#60a5fa';
+                }
+              }}
+              onMouseLeave={e => {
+                if (link.highlight) {
+                  e.currentTarget.style.background = 'rgba(58,111,247,0.1)';
+                  e.currentTarget.style.color = '#3A6FF7';
+                }
+              }}
             >
+              {link.highlight && <span>✦ </span>}
               {link.name}
             </Link>
           ))}
         </nav>
-
-        {/* Design Enquiry CTA — desktop */}
-        <Link
-          to="/design-enquiry"
-          id="nav-design-enquiry"
-          style={{
-            display: 'inline-flex', alignItems: 'center', gap: '0.4rem',
-            padding: '0.4rem 1rem', borderRadius: 8,
-            background: 'rgba(58,111,247,0.1)',
-            border: '1px solid rgba(58,111,247,0.35)',
-            color: '#3A6FF7', fontSize: '0.82rem', fontWeight: 700,
-            letterSpacing: '0.04em', transition: 'all 0.2s',
-            whiteSpace: 'nowrap',
-          }}
-          onMouseEnter={e => { e.currentTarget.style.background='rgba(58,111,247,0.2)'; e.currentTarget.style.color='#60a5fa' }}
-          onMouseLeave={e => { e.currentTarget.style.background='rgba(58,111,247,0.1)'; e.currentTarget.style.color='#3A6FF7' }}
-        >
-          ✦ Design Enquiry
-        </Link>
 
         {/* CTA and Cart — desktop */}
         <div className="navbar__actions-desktop" style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
@@ -205,7 +208,9 @@ export default function Navbar() {
                     className="navbar__mobile-link"
                     id={`nav-mobile-link-${link.name.toLowerCase().replace(/ & | /g, '-')}`}
                     onClick={() => setMenuOpen(false)}
+                    style={link.highlight ? { color: '#3A6FF7', fontWeight: 700 } : {}}
                   >
+                    {link.highlight && <span>✦ </span>}
                     {link.name}
                   </Link>
                 </motion.div>
@@ -217,17 +222,6 @@ export default function Navbar() {
                   onClick={() => setMenuOpen(false)}
                 >
                   Track Order
-                </Link>
-              </motion.div>
-              <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: (navLinks.length + 1) * 0.06, duration: 0.3 }}>
-                <Link
-                  to="/design-enquiry"
-                  id="nav-mobile-design-enquiry"
-                  className="navbar__mobile-link"
-                  onClick={() => setMenuOpen(false)}
-                  style={{ color: '#3A6FF7', fontWeight: 700 }}
-                >
-                  ✦ Design Enquiry
                 </Link>
               </motion.div>
             </div>

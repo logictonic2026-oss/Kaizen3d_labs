@@ -12,8 +12,8 @@ const toBase64 = (file) =>
   })
 
 const INITIAL = {
-  name: '', email: '', phone: '',
-  address: '', city: '', pincode: '',
+  name: '', companyName: '', email: '', phone: '',
+  address: '', city: '', pincode: '', country: '',
   description: '',
 }
 
@@ -121,11 +121,13 @@ export default function DesignEnquiry() {
       const payload = {
         request_type: type === '3d_model' ? '3D Model Generation (Meshy)' : 'Design Enquiry',
         name:        form.name,
+        company_name:form.companyName,
         email:       form.email,
         phone:       form.phone,
         address:     form.address,
         city:        form.city,
         pincode:     form.pincode,
+        country:     form.country,
         description: form.description
       }
 
@@ -198,11 +200,13 @@ export default function DesignEnquiry() {
           formData.append('subject', `New Design Enquiry from ${form.name}`);
           formData.append('from_name', "Kaizen 3D Labs");
           formData.append('Name', form.name);
+          formData.append('Company Name', form.companyName || 'N/A');
           formData.append('Email', form.email);
           formData.append('Phone', form.phone);
           formData.append('Address', form.address || 'N/A');
           formData.append('City', form.city || 'N/A');
           formData.append('Pincode', form.pincode || 'N/A');
+          formData.append('Country', form.country || 'N/A');
           formData.append('Description', form.description || 'No description provided.');
           
           // Attach images
@@ -480,9 +484,10 @@ export default function DesignEnquiry() {
           {/* ── Personal Details ── */}
           <SectionLabel icon="👤" label="Personal Details" />
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: '1rem', marginBottom: '2rem' }}>
-            <Field label="Full Name" name="name" type="text" placeholder="e.g. Arjun Sharma" value={form.name} onChange={change} required />
-            <Field label="Email Address" name="email" type="email" placeholder="you@example.com" value={form.email} onChange={change} required />
-            <Field label="Phone Number" name="phone" type="tel" placeholder="+91 98765 43210" value={form.phone} onChange={change} required />
+            <Field label="Company Name" name="companyName" type="text" placeholder="Your Company" value={form.companyName} onChange={change} />
+            <Field label="User Name" name="name" type="text" placeholder="e.g. Arjun Sharma" value={form.name} onChange={change} required />
+            <Field label="Personal / Organisation Mail" name="email" type="email" placeholder="you@example.com" value={form.email} onChange={change} required />
+            <Field label="Mobile Number" name="phone" type="tel" placeholder="+91 98765 43210" value={form.phone} onChange={change} required />
           </div>
 
           {/* ── Place Details ── */}
@@ -493,6 +498,7 @@ export default function DesignEnquiry() {
             </div>
             <Field label="City" name="city" type="text" placeholder="e.g. Hyderabad" value={form.city} onChange={change} />
             <Field label="Pincode" name="pincode" type="text" placeholder="500001" value={form.pincode} onChange={change} />
+            <Field label="Country" name="country" type="text" placeholder="e.g. India" value={form.country} onChange={change} />
           </div>
 
           {/* ── Reference Images ── */}
@@ -640,7 +646,7 @@ export default function DesignEnquiry() {
               ) : status === 'polling' ? (
                 <><Spinner /> Generating Model...</>
               ) : (
-                <><span style={{ fontSize: '1.1rem' }}>✨</span> AI Generate 3D Model</>
+                <><span style={{ fontSize: '1.1rem' }}>✨</span> Generate 3D Model</>
               )}
             </motion.button>
 

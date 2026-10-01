@@ -165,12 +165,14 @@ ON CONFLICT (slug) DO NOTHING;
 CREATE TABLE IF NOT EXISTS design_enquiries (
   id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   request_type    text NOT NULL, -- '3D Model Generation' | 'Design Enquiry'
+  company_name    text,
   name            text NOT NULL,
   email           text NOT NULL,
   phone           text NOT NULL,
   address         text,
   city            text,
   pincode         text,
+  country         text,
   description     text,
   images          jsonb DEFAULT '[]'::jsonb,
   status          text DEFAULT 'pending', -- 'pending' | 'reviewed' | 'resolved'

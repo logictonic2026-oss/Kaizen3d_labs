@@ -5,7 +5,67 @@ import { Reveal } from './animations'
 
 export default function Hero() {
   return (
-    <section className="hero" id="home" style={{ display: 'flex', alignItems: 'center', minHeight: '80vh', padding: '6rem 2rem 2rem' }}>
+    <section className="hero" id="home" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', minHeight: '80vh', padding: '6rem 2rem 2rem' }}>
+      
+      {/* Promotional Banner */}
+      <motion.div
+        initial={{ y: -20, opacity: 0, scale: 0.95 }}
+        animate={{ y: 0, opacity: 1, scale: 1, backgroundPosition: ['0% 50%', '200% 50%'] }}
+        transition={{ 
+          y: { duration: 0.6, type: 'spring' },
+          opacity: { duration: 0.6 },
+          backgroundPosition: { repeat: Infinity, duration: 4, ease: "linear" }
+        }}
+        style={{
+          padding: '2px', // Creates the border thickness
+          borderRadius: '50px',
+          background: 'linear-gradient(90deg, #3A6FF7, #09090b, #6366f1, #09090b, #3A6FF7)',
+          backgroundSize: '200% 200%',
+          display: 'inline-flex',
+          margin: '0 auto 3rem auto',
+          boxShadow: '0 10px 40px rgba(58, 111, 247, 0.25)',
+          zIndex: 10,
+          cursor: 'pointer'
+        }}
+      >
+        {/* Inner Glassmorphic Panel */}
+        <div style={{
+          background: 'rgba(9, 9, 11, 0.85)', // Deep brand black with transparency
+          backdropFilter: 'blur(12px)',
+          borderRadius: '48px',
+          padding: '0.75rem 2rem',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '1.5rem',
+          width: '100%'
+        }}>
+          <span style={{ color: '#F7F6F2', fontWeight: 600, fontSize: '1.05rem', letterSpacing: '0.02em', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <span style={{ fontSize: '1.2rem' }}>✨</span>
+            Limited Offer: Generating Designs For You!
+          </span>
+          <Link 
+            to="/design-enquiry" 
+            style={{ 
+              background: 'linear-gradient(135deg, #3A6FF7 0%, #6366f1 100%)', 
+              color: '#ffffff', 
+              padding: '0.5rem 1.5rem', 
+              borderRadius: '30px', 
+              textDecoration: 'none', 
+              fontSize: '0.85rem',
+              fontWeight: 800,
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em',
+              boxShadow: '0 4px 15px rgba(58, 111, 247, 0.4)',
+              transition: 'transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
+            }}
+            onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.08)'}
+            onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+          >
+            Try Now
+          </Link>
+        </div>
+      </motion.div>
+
       {/* Glow effects */}
       <div className="glow-dot glow-dot--blue" style={{ top: '10%', right: '5%', opacity: 0.6 }} />
       <div className="glow-dot glow-dot--blue" style={{ bottom: '10%', left: '5%', opacity: 0.3 }} />

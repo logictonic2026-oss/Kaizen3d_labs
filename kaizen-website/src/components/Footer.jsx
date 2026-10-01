@@ -38,7 +38,7 @@ export default function Footer() {
           <Reveal delay={0.3}>
             <div className="footer-cta__actions">
               <motion.a
-                href="#quote"
+                href="/design-enquiry"
                 className="btn btn--primary"
                 id="footer-cta-primary"
                 whileHover={{ scale: 1.03, boxShadow: '0 8px 32px rgba(58,111,247,0.4)' }}
@@ -48,16 +48,6 @@ export default function Footer() {
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                   <path d="M3 8H13M13 8L9 4M13 8L9 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
-              </motion.a>
-
-              <motion.a
-                href="mailto:orders@kaizen3dlabs.com"
-                className="btn btn--ghost"
-                id="footer-cta-email"
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-              >
-                orders@kaizen3dlabs.com
               </motion.a>
             </div>
           </Reveal>
