@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { motion } from 'framer-motion'
 import { Reveal } from './animations'
+import { Link } from 'react-router-dom'
 
 export default function Footer() {
   const [copied, setCopied] = useState(false)
@@ -128,8 +129,32 @@ export default function Footer() {
           <div>
             <div className="footer__col-title">Company</div>
             <ul className="footer__links">
-              {['About', 'Process', 'Industries', 'Shop', 'Contact'].map(p => (
-                <li key={p}><a href={`#${p.toLowerCase().replace(/\s+/g, '-')}`} className="footer__link" id={`footer-link-${p.toLowerCase().replace(/\s+/g, '-')}`}>{p}</a></li>
+              {[
+                { label: 'About', href: '/about' },
+                { label: 'Shop', href: '/shop' },
+                { label: 'Track Order', href: '/track-order' },
+                { label: 'Contact', href: '/contact' },
+              ].map(p => (
+                <li key={p.label}>
+                  <Link to={p.href} className="footer__link" id={`footer-link-${p.label.toLowerCase().replace(/\s+/g, '-')}`}>{p.label}</Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* Legal */}
+          <div>
+            <div className="footer__col-title">Legal</div>
+            <ul className="footer__links">
+              {[
+                { label: 'Terms & Conditions', href: '/terms' },
+                { label: 'Privacy Policy', href: '/privacy' },
+                { label: 'Refund Policy', href: '/refund' },
+                { label: 'Shipping Policy', href: '/shipping' },
+              ].map(p => (
+                <li key={p.label}>
+                  <Link to={p.href} className="footer__link" id={`footer-link-${p.label.toLowerCase().replace(/[\s&]+/g, '-')}`}>{p.label}</Link>
+                </li>
               ))}
             </ul>
           </div>
@@ -164,7 +189,13 @@ export default function Footer() {
         {/* Bottom bar */}
         <div className="footer__bottom">
           <span className="footer__copyright">© 2025 Kaizen 3D Labs. All rights reserved.</span>
-          <span className="footer__tagline-small">IF IT CAN BE IMAGINED, IT CAN BE PRINTED.</span>
+          <div style={{ display: 'flex', gap: '1.25rem', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'center' }}>
+            <Link to="/terms" className="footer__link" style={{ fontSize: 'var(--text-xs)' }}>Terms</Link>
+            <Link to="/privacy" className="footer__link" style={{ fontSize: 'var(--text-xs)' }}>Privacy</Link>
+            <Link to="/refund" className="footer__link" style={{ fontSize: 'var(--text-xs)' }}>Refunds</Link>
+            <Link to="/shipping" className="footer__link" style={{ fontSize: 'var(--text-xs)' }}>Shipping</Link>
+            <Link to="/contact" className="footer__link" style={{ fontSize: 'var(--text-xs)' }}>Contact</Link>
+          </div>
         </div>
       </footer>
     </>

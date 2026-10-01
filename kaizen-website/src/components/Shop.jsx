@@ -1,43 +1,17 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Reveal, StaggerReveal, StaggerItem } from './animations'
 import { useCart } from '../context/CartContext'
+import { supabase } from '../supabase'
 
-const products = [
-  {
-    id: 'venkateshwara',
-    name: 'Lord Venkateshwara',
-    subtitle: 'Car Dashboard Idol',
-    desc: 'A beautifully crafted Lord Venkateshwara idol, designed to sit elegantly on your car dashboard. Made with premium PLA filament with a fine detail finish.',
-    price: 'Price TBD',
-    priceRaw: 0,
-    images: ['/product-venkateshwara-1.jpg', '/product-venkateshwara-2.jpg'],
-    imageLabels: ['Product', 'In Application'],
-    tag: 'Dashboard Idol'
-  },
-  {
-    id: 'ganesha',
-    name: 'Lord Ganesha',
-    subtitle: 'Car Dashboard Idol',
-    desc: 'An intricately printed Lord Ganesha idol — the remover of obstacles — crafted for your car dashboard. A perfect daily blessing on every journey.',
-    price: 'Price TBD',
-    priceRaw: 0,
-    images: ['/product-ganesha-1.jpg', '/product-ganesha-2.jpg'],
-    imageLabels: ['Product', 'In Application'],
-    tag: 'Dashboard Idol'
-  },
-  {
-    id: 'kumkum',
-    name: 'Kumkum Gopuram',
-    subtitle: 'Gift Your Loved One',
-    desc: 'A traditional Kumkum Gopuram, elegantly designed and 3D printed as a unique and meaningful gift for festivals and special occasions.',
-    price: 'Price TBD',
-    priceRaw: 0,
-    images: ['/product-kumkum-1.jpg', '/product-kumkum-2.jpg'],
-    imageLabels: ['Product', 'In Use'],
-    tag: 'Gift Item'
-  },
-]
+// Format number as INR currency
+const formatINR = (amount) => {
+  return new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: 'INR',
+    maximumFractionDigits: 0,
+  }).format(amount)
+}
 
 // ── Per-card image carousel ───────────────────────────────────────────────
 function ProductImageCarousel({ product, onZoomClick }) {
@@ -170,6 +144,26 @@ function ProductImageCarousel({ product, onZoomClick }) {
 export default function Shop() {
   const { addToCart } = useCart()
   const [zoomedImage, setZoomedImage] = useState(null)
+  const [products, setProducts] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const fetchProducts = async () => {
+      const { data, error } = await supabase
+        .from('products')
+        .select('*')
+        .eq('is_active', true)
+        
+      if (error) {
+        console.error('Error fetching products:', error)
+      } else {
+        setProducts(data || [])
+      }
+      setLoading(false)
+    }
+    
+    fetchProducts()
+  }, [])
 
   return (
     <section className="shop" id="shop">
@@ -192,7 +186,12 @@ export default function Shop() {
           </Reveal>
         </div>
 
-        <StaggerReveal className="shop__grid">
+        {loading ? (
+          <div style={{ textAlign: 'center', padding: '4rem', color: 'var(--silver-grey)' }}>
+            Loading products...
+          </div>
+        ) : (
+          <StaggerReveal className="shop__grid">
           {products.map((product) => (
             <StaggerItem key={product.id}>
               <motion.div
@@ -212,9 +211,9 @@ export default function Shop() {
                       </p>
                     )}
                   </div>
-                  <p className="product-card__desc">{product.desc}</p>
+                  <p className="product-card__desc">{product.desc || product.description}</p>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-                    <div className="product-card__price">{product.price}</div>
+                    <div className="product-card__price">{formatINR(product.price)}</div>
                   </div>
                   <button
                     className="btn btn--primary"
@@ -227,7 +226,8 @@ export default function Shop() {
               </motion.div>
             </StaggerItem>
           ))}
-        </StaggerReveal>
+          </StaggerReveal>
+        )}
       </div>
 
       {/* ── Zoom Modal ────────────────────────────────────────────────────────── */}

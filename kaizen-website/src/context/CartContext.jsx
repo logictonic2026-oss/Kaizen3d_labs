@@ -10,6 +10,7 @@ export function CartProvider({ children }) {
   const [cartItems, setCartItems] = useState([])
   const [isCartOpen, setIsCartOpen] = useState(false)
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false)
+  const [isTrackOrderOpen, setIsTrackOrderOpen] = useState(false)
 
   const addToCart = (product) => {
     setCartItems(prev => {
@@ -42,8 +43,7 @@ export function CartProvider({ children }) {
   const clearCart = () => setCartItems([])
 
   const cartTotal = cartItems.reduce((total, item) => {
-    const price = parseFloat(item.price.replace('$', ''))
-    return total + (price * item.quantity)
+    return total + (Number(item.price) * item.quantity)
   }, 0)
 
   const cartCount = cartItems.reduce((count, item) => count + item.quantity, 0)
@@ -60,7 +60,9 @@ export function CartProvider({ children }) {
       isCartOpen,
       setIsCartOpen,
       isCheckoutOpen,
-      setIsCheckoutOpen
+      setIsCheckoutOpen,
+      isTrackOrderOpen,
+      setIsTrackOrderOpen
     }}>
       {children}
     </CartContext.Provider>

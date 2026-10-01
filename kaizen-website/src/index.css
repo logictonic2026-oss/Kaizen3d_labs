@@ -98,11 +98,10 @@ body {
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  cursor: url('/cursor-nozzle.svg') 12 15, auto;
 }
 img, video { max-width: 100%; display: block; }
-a { color: inherit; text-decoration: none; cursor: url('/cursor-nozzle-active.svg') 12 15, pointer; }
-button { cursor: url('/cursor-nozzle-active.svg') 12 15, pointer; border: none; background: none; font-family: inherit; }
+a { color: inherit; text-decoration: none; cursor: pointer; }
+button { cursor: pointer; border: none; background: none; font-family: inherit; }
 ul, ol { list-style: none; }
 
 /* ============================================================ UTILITIES */
@@ -202,7 +201,7 @@ h1, h2, h3, h4, h5, h6 {
 ::-webkit-scrollbar-thumb:hover { background: var(--cobalt-blue); }
 
 /* ============================================================ SELECTION */
-::selection { background: var(--cobalt-dim); color: var(--warm-white); }
+::selection { background: rgba(58, 111, 247, 0.5); color: #fff; }
 
 /* ============================================================ NAVBAR */
 .navbar {
@@ -1605,10 +1604,7 @@ h1, h2, h3, h4, h5, h6 {
 
 /* ============================================================ RESPONSIVE */
 @media (max-width: 1024px) {
-  .hero { grid-template-columns: 1fr; padding-top: 120px; gap: var(--space-12); }
-  .hero__visual { height: 400px; }
-  .hero__model-container { width: 380px; height: 380px; }
-  .philosophy__inner { grid-template-columns: 1fr; gap: var(--space-12); }
+  /* Keep hero 2-column — only collapse grids that are genuinely wide */
   .shop__grid { grid-template-columns: repeat(2, 1fr); }
   .capabilities__grid { grid-template-columns: repeat(2, 1fr); }
   .workflow__steps { grid-template-columns: repeat(3, 1fr); gap: var(--space-8); }
@@ -1618,16 +1614,24 @@ h1, h2, h3, h4, h5, h6 {
   .values__grid { grid-template-columns: repeat(2, 1fr); }
   .footer__inner { grid-template-columns: 1fr 1fr; gap: var(--space-8); }
   .section-header { flex-direction: column; align-items: flex-start; gap: var(--space-4); }
+}
+
+@media (max-width: 768px) {
+  /* Hero collapses to single column on real tablets/mobile */
+  .hero { grid-template-columns: 1fr; padding-top: 120px; gap: var(--space-12); }
+  .hero__visual { height: 400px; }
+  .hero__model-container { width: 380px; height: 380px; }
+  .philosophy__inner { grid-template-columns: 1fr; gap: var(--space-12); }
 
   /* Checkout: stack to single column on tablet */
   .checkout__grid { grid-template-columns: 1fr; }
   .checkout__summary-panel { position: static; order: -1; }
 }
 
-@media (max-width: 768px) {
+@media (max-width: 640px) {
   :root { --space-32: 5rem; }
 
-  /* Navbar mobile */
+  /* Navbar goes mobile only on real phones/small tablets */
   .navbar__nav { display: none; }
   .navbar__actions-desktop { display: none; }
   .navbar__mobile-controls { display: flex; }

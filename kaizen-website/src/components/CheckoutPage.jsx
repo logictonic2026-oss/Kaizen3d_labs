@@ -1,6 +1,15 @@
 import React, { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useCart } from '../context/CartContext'
+import { supabase } from '../supabase'
+
+const formatINR = (amount) => {
+  return new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: 'INR',
+    maximumFractionDigits: 0,
+  }).format(amount)
+}
 
 // ─── Promo codes (simple client-side for now) ─────────────────────────────
 const PROMO_CODES = {
@@ -99,34 +108,46 @@ export default function CheckoutPage() {
     e.preventDefault()
     setStatus('submitting')
     try {
-      const payload = {
-        type: 'order',
-        customer: info,
-        shipping,
-        paymentMethod: payMethod,
-        promoCode: promo || 'None',
-        discountPercent: `${(discount * 100).toFixed(0)}%`,
-        items: cartItems.map(i => ({ name: i.name, price: i.price, quantity: i.quantity })),
-        subtotal: cartTotal.toFixed(2),
-        discount: discountAmt.toFixed(2),
-        total: finalTotal.toFixed(2),
-        date: new Date().toISOString(),
-      }
-      const scriptUrl = import.meta.env.VITE_GOOGLE_SCRIPT_URL || 'YOUR_GOOGLE_SCRIPT_URL'
-      if (scriptUrl === 'YOUR_GOOGLE_SCRIPT_URL') throw new Error('Webhook URL is missing.')
+      // 1. Insert Order
+      const { data: orderData, error: orderError } = await supabase
+        .from('orders')
+        .insert({
+          customer_name: info.name,
+          customer_email: info.email,
+          customer_phone: info.phone,
+          shipping_address: shipping.address,
+          shipping_city: shipping.city,
+          shipping_state: shipping.state,
+          shipping_zip: shipping.zip,
+          shipping_country: shipping.country,
+          payment_method: payMethod,
+          promo_code: promo || null,
+          discount_amount: discountAmt,
+          subtotal: cartTotal,
+          total: finalTotal,
+          status: 'pending'
+        })
+        .select()
+        .single()
 
-      const res = await fetch(scriptUrl, {
-        method: 'POST',
-        body: JSON.stringify(payload),
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      })
-      const result = await res.json()
-      if (result.result === 'success') {
-        setStatus('success')
-        clearCart()
-      } else {
-        throw new Error(result.message || 'Submission failed')
-      }
+      if (orderError) throw new Error(orderError.message)
+
+      // 2. Insert Order Items
+      const orderItems = cartItems.map(item => ({
+        order_id: orderData.id,
+        product_id: item.id,
+        product_name: item.name,
+        price_at_purchase: item.price,
+        quantity: item.quantity,
+        image_url: item.image
+      }))
+
+      const { error: itemsError } = await supabase.from('order_items').insert(orderItems)
+      
+      if (itemsError) throw new Error(itemsError.message)
+
+      setStatus('success')
+      clearCart()
     } catch (err) {
       console.error(err)
       setStatus('error')
@@ -316,15 +337,15 @@ export default function CheckoutPage() {
                     className="btn btn--primary"
                     disabled={status === 'submitting'}
                     style={{ justifyContent: 'center', marginTop: '2rem', padding: '1rem', fontSize: '1rem' }}
-                  >
-                    {status === 'submitting' ? (
-                      <span>Processing...</span>
-                    ) : status === 'error' ? (
-                      <span>⚠ {errorMsg || 'Error. Try again.'}</span>
-                    ) : (
-                      <span>Place Order · ${finalTotal.toFixed(2)}</span>
-                    )}
-                  </button>
+                    >
+                      {status === 'submitting' ? (
+                        <span>Processing...</span>
+                      ) : status === 'error' ? (
+                        <span>⚠ {errorMsg || 'Error. Try again.'}</span>
+                      ) : (
+                        <span>Place Order · {formatINR(finalTotal)}</span>
+                      )}
+                    </button>
 
                   <p style={{ textAlign: 'center', color: 'var(--steel-grey)', fontSize: '0.75rem', marginTop: '1rem' }}>
                     🔒 Your information is secured and encrypted. We respect your privacy.
@@ -370,10 +391,10 @@ export default function CheckoutPage() {
                     </div>
                     <div style={{ flex: 1 }}>
                       <p style={{ fontSize: '0.85rem', fontWeight: 600, margin: 0 }}>{item.name}</p>
-                      <p style={{ fontSize: '0.8rem', color: 'var(--silver-grey)', margin: 0 }}>{item.price} each</p>
+                      <p style={{ fontSize: '0.8rem', color: 'var(--silver-grey)', margin: 0 }}>{formatINR(item.price)} each</p>
                     </div>
                     <span style={{ fontSize: '0.9rem', fontWeight: 700 }}>
-                      ${(parseFloat(item.price.replace('$', '')) * item.quantity).toFixed(2)}
+                      {formatINR(item.price * item.quantity)}
                     </span>
                   </div>
                 ))}
@@ -381,19 +402,19 @@ export default function CheckoutPage() {
 
               <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', color: 'var(--silver-grey)' }}>
-                  <span>Subtotal</span><span>${cartTotal.toFixed(2)}</span>
+                  <span>Subtotal</span><span>{formatINR(cartTotal)}</span>
                 </div>
                 {discount > 0 && (
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', color: '#22c55e' }}>
                     <span>Discount ({(discount * 100).toFixed(0)}%)</span>
-                    <span>-${discountAmt.toFixed(2)}</span>
+                    <span>-{formatINR(discountAmt)}</span>
                   </div>
                 )}
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', color: 'var(--silver-grey)' }}>
                   <span>Shipping</span><span style={{ color: '#22c55e' }}>Free</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1.15rem', fontWeight: 700, borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '0.75rem', marginTop: '0.25rem' }}>
-                  <span>Total</span><span>${finalTotal.toFixed(2)}</span>
+                  <span>Total</span><span>{formatINR(finalTotal)}</span>
                 </div>
               </div>
 
