@@ -53,6 +53,10 @@ export default function OrderConfirmation() {
 
   const formatINR = (n) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(n)
 
+  const isOnline = order.payment_method === 'razorpay'
+  const isPaid = order.payment_status === 'paid'
+  const awaitingOnline = isOnline && !isPaid
+
   return (
     <div style={{ minHeight: '100vh', paddingTop: '120px', paddingBottom: '4rem' }}>
       <div style={{ maxWidth: 600, margin: '0 auto', padding: '0 1.5rem' }}>
@@ -63,14 +67,24 @@ export default function OrderConfirmation() {
               display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem',
               border: '2px solid rgba(34,197,94,0.2)'
             }}>
-              <span style={{ fontSize: '2.5rem' }}>🎉</span>
+              <span style={{ fontSize: '2.5rem' }}>{awaitingOnline ? '⏳' : '🎉'}</span>
             </div>
             <h1 style={{ fontSize: '2rem', fontWeight: 800, margin: '0 0 0.5rem', color: '#e2e8f0' }}>
-              Order Confirmed!
+              {awaitingOnline ? 'Confirming Payment…' : 'Order Confirmed!'}
             </h1>
             <p style={{ color: '#94a3b8', fontSize: '1rem', margin: 0 }}>
               Thank you for your purchase, {order.customer_name.split(' ')[0]}.
             </p>
+            {isOnline && isPaid && order.razorpay_payment_id && (
+              <p style={{ color: '#22c55e', fontSize: '0.8rem', margin: '0.75rem 0 0', fontWeight: 600 }}>
+                ✓ Payment received · Ref {order.razorpay_payment_id}
+              </p>
+            )}
+            {awaitingOnline && (
+              <p style={{ color: '#eab308', fontSize: '0.8rem', margin: '0.75rem 0 0' }}>
+                We're waiting for confirmation from Razorpay. This usually takes a few seconds — refresh shortly.
+              </p>
+            )}
           </div>
         </Reveal>
 
@@ -125,8 +139,13 @@ export default function OrderConfirmation() {
                   <span>Discount {order.promo_code && `(${order.promo_code})`}</span><span>− {formatINR(order.discount_amount)}</span>
                 </div>
               )}
+              {Number(order.shipping_cost) > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', fontSize: '0.875rem', color: '#94a3b8' }}>
+                  <span>Delivery</span><span>+{formatINR(order.shipping_cost)}</span>
+                </div>
+              )}
               <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '0.75rem', borderTop: '1px solid rgba(255,255,255,0.08)', fontSize: '1.1rem', fontWeight: 800, color: '#e2e8f0', marginTop: '0.5rem' }}>
-                <span>Total Paid</span><span>{formatINR(order.total)}</span>
+                <span>{isPaid ? 'Total Paid' : 'Total'}</span><span>{formatINR(order.total)}</span>
               </div>
             </div>
           </div>
