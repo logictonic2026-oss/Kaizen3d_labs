@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useCart } from '../context/CartContext'
 import { supabase } from '../supabase'
+import { loadRazorpay, createRazorpayOrder, verifyRazorpayPayment, openRazorpayCheckout } from '../lib/razorpay'
 
 const INDIAN_STATES = [
   'Andhra Pradesh','Arunachal Pradesh','Assam','Bihar','Chhattisgarh','Goa','Gujarat',
@@ -124,13 +125,24 @@ export default function Checkout() {
   const [promoMsg, setPromoMsg]       = useState('')
 
   const [placing,  setPlacing]  = useState(false)
+  const [placingStep, setPlacingStep] = useState('') // label shown on the button while working
   const [placingErr, setPlacingErr] = useState('')
   const [agreeToTerms, setAgreeToTerms] = useState(false)
 
+  // Razorpay order created on the server but not yet paid (reused if the user retries)
+  const pendingPaymentRef = useRef(null) // { fingerprint, order }
+  // Set when navigating away after success, so the empty-cart redirect doesn't fire
+  const completedRef = useRef(false)
+
   // Redirect if cart empty
   useEffect(() => {
-    if (cartItems.length === 0) navigate('/shop')
+    if (cartItems.length === 0 && !completedRef.current) navigate('/shop')
   }, [cartItems])
+
+  // Preload Razorpay checkout script so the modal opens instantly
+  useEffect(() => {
+    if (form.payment_method === 'razorpay') loadRazorpay()
+  }, [form.payment_method])
 
   const set = (key) => (e) => setForm(f => ({ ...f, [key]: e.target.value }))
 
@@ -245,6 +257,99 @@ export default function Checkout() {
     return Object.keys(e).length === 0
   }
 
+  // ── Confirmation email via Google Apps Script (optional, never blocks) ──
+  const sendConfirmationEmail = async (orderId, items, orderTotal, paymentMethod) => {
+    const scriptUrl = import.meta.env.VITE_GOOGLE_SCRIPT_URL
+    if (!scriptUrl) return
+    try {
+      await fetch(scriptUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type:       'order_confirmation',
+          orderId:    orderId.slice(0, 8).toUpperCase(),
+          orderFull:  orderId,
+          name:       form.full_name,
+          email:      form.email,
+          items:      items.map(i => ({ name: i.name, qty: i.quantity, price: i.price })),
+          total:      orderTotal,
+          paymentMethod,
+        }),
+      })
+    } catch (_) { /* email is optional, don't block order */ }
+  }
+
+  // ── Razorpay flow: server creates order → modal → server verifies signature ──
+  const handleRazorpayPayment = async () => {
+    const ok = await loadRazorpay()
+    if (!ok) throw new Error('Could not load Razorpay. Check your internet connection and try again.')
+
+    const payload = {
+      customer: {
+        full_name: form.full_name, email: form.email, mobile: form.mobile.replace(/\s/g, ''),
+        alt_mobile: form.alt_mobile, address: form.address, landmark: form.landmark,
+        city: form.city, state: form.state, pincode: form.pincode, country: form.country,
+        company_name: showGST ? form.company_name : '', gst_number: showGST ? form.gst_number : '',
+      },
+      items: cartItems.map(i => ({ id: i.id, quantity: i.quantity })),
+      promo_code: promoApplied?.code || null,
+      shipping_method: form.shipping_method,
+    }
+
+    // Reuse the unpaid Razorpay order if nothing changed (prevents duplicate orders on retry)
+    const fingerprint = JSON.stringify(payload)
+    let order = pendingPaymentRef.current?.fingerprint === fingerprint
+      ? pendingPaymentRef.current.order
+      : null
+
+    if (!order) {
+      setPlacingStep('Creating secure payment…')
+      order = await createRazorpayOrder(payload)
+      pendingPaymentRef.current = { fingerprint, order }
+    }
+
+    // Safety check: server total should match what the customer sees
+    if (Math.round(order.total) !== Math.round(total)) {
+      pendingPaymentRef.current = null
+      throw new Error(`Prices were updated. Your new total is ${formatINR(order.total)} — please review your cart and try again.`)
+    }
+
+    setPlacingStep('Waiting for payment…')
+    let response
+    try {
+      response = await openRazorpayCheckout({ order, customer: payload.customer })
+    } catch (e) {
+      if (e?.dismissed) throw new Error('Payment was cancelled. You can try again — you have not been charged.')
+      throw e
+    }
+
+    setPlacingStep('Verifying payment…')
+    try {
+      await verifyRazorpayPayment({
+        order_id: order.order_id,
+        razorpay_order_id: response.razorpay_order_id,
+        razorpay_payment_id: response.razorpay_payment_id,
+        razorpay_signature: response.razorpay_signature,
+      })
+    } catch (e) {
+      // Money may already be debited — the webhook will still confirm the order.
+      // Don't let the customer pay again on a new order.
+      pendingPaymentRef.current = null
+      throw new Error(
+        `We received your payment (ID: ${response.razorpay_payment_id}) but couldn't confirm it instantly. ` +
+        `Please don't pay again — your order #${order.order_id.slice(0, 8).toUpperCase()} will be confirmed automatically, ` +
+        `or contact us with this ID.`
+      )
+    }
+
+    pendingPaymentRef.current = null
+    await sendConfirmationEmail(order.order_id, cartItems, order.total, 'razorpay')
+
+    completedRef.current = true
+    clearCart()
+    navigate(`/order-confirmation?id=${order.order_id}`)
+  }
+
   // ── Place Order ──
   const handlePlaceOrder = async () => {
     if (!validate()) {
@@ -253,6 +358,18 @@ export default function Checkout() {
     }
     setPlacing(true)
     setPlacingErr('')
+    setPlacingStep('')
+
+    if (form.payment_method === 'razorpay') {
+      try {
+        await handleRazorpayPayment()
+      } catch (err) {
+        setPlacingErr(err.message || 'Payment failed. Please try again.')
+        setPlacing(false)
+        setPlacingStep('')
+      }
+      return
+    }
 
     try {
       // 1. Insert order
@@ -272,7 +389,7 @@ export default function Checkout() {
           discount_amount:  discount,
           subtotal:         cartTotal,
           total:            total,
-          status:           form.payment_method === 'razorpay' ? 'payment_pending' : 'pending',
+          status:           'pending',
         }])
         .select()
         .single()
@@ -301,27 +418,10 @@ export default function Checkout() {
       }
 
       // 4. Send confirmation email via Google Apps Script (if configured)
-      const scriptUrl = import.meta.env.VITE_GOOGLE_SCRIPT_URL
-      if (scriptUrl) {
-        try {
-          await fetch(scriptUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              type:       'order_confirmation',
-              orderId:    order.id.slice(0, 8).toUpperCase(),
-              orderFull:  order.id,
-              name:       form.full_name,
-              email:      form.email,
-              items:      cartItems.map(i => ({ name: i.name, qty: i.quantity, price: i.price })),
-              total,
-              paymentMethod: form.payment_method,
-            }),
-          })
-        } catch (_) { /* email is optional, don't block order */ }
-      }
+      await sendConfirmationEmail(order.id, cartItems, total, form.payment_method)
 
       // 5. Clear cart and navigate
+      completedRef.current = true
       clearCart()
       navigate(`/order-confirmation?id=${order.id}`)
 
@@ -573,7 +673,9 @@ export default function Checkout() {
                 ))}
               </div>
               <p style={{ fontSize: '0.75rem', color: '#475569', marginTop: '1rem', lineHeight: 1.5 }}>
-                📧 After placing your order, we will email you payment details and confirm your order within 24 hours.
+                {form.payment_method === 'razorpay'
+                  ? '🔒 You\'ll pay securely via Razorpay (UPI, cards, netbanking, wallets). Your order is confirmed instantly after payment.'
+                  : '📧 After placing your order, we will email you payment details and confirm your order within 24 hours.'}
               </p>
             </SectionCard>
 
@@ -625,7 +727,9 @@ export default function Checkout() {
             >
               {placing ? (
                 <><span style={{ width: 20, height: 20, border: '2px solid rgba(255,255,255,0.3)', borderTop: '2px solid #fff', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.8s linear infinite' }} />
-                  Placing your order…</>
+                  {placingStep || 'Placing your order…'}</>
+              ) : form.payment_method === 'razorpay' ? (
+                `🔒 Pay Securely · ${formatINR(total)}`
               ) : (
                 `🛡 Place Order · ${formatINR(total)}`
               )}

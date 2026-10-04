@@ -1,0 +1,12 @@
+project_id = "kaizen-website"
+
+[functions.razorpay-create-order]
+verify_jwt = true
+
+[functions.razorpay-verify-payment]
+verify_jwt = true
+
+# Razorpay calls this directly and cannot send a Supabase JWT.
+# Authenticity is enforced via the X-Razorpay-Signature HMAC instead.
+[functions.razorpay-webhook]
+verify_jwt = false

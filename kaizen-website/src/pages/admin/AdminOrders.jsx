@@ -5,14 +5,23 @@ import { supabase } from '../../supabase'
 const formatINR = (n) =>
   new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(n)
 
-const STATUSES = ['pending', 'processing', 'shipped', 'delivered', 'cancelled']
+const STATUSES = ['payment_pending', 'pending', 'processing', 'shipped', 'delivered', 'cancelled']
 
 const STATUS_STYLE = {
+  payment_pending: { bg: 'rgba(148,163,184,0.1)', text: '#94a3b8', border: 'rgba(148,163,184,0.3)' },
   pending:    { bg: 'rgba(234,179,8,0.1)',  text: '#eab308', border: 'rgba(234,179,8,0.3)'  },
   processing: { bg: 'rgba(59,130,246,0.1)', text: '#3b82f6', border: 'rgba(59,130,246,0.3)' },
   shipped:    { bg: 'rgba(168,85,247,0.1)', text: '#a855f7', border: 'rgba(168,85,247,0.3)' },
   delivered:  { bg: 'rgba(34,197,94,0.1)',  text: '#22c55e', border: 'rgba(34,197,94,0.3)'  },
   cancelled:  { bg: 'rgba(239,68,68,0.1)',  text: '#ef4444', border: 'rgba(239,68,68,0.3)'  },
+}
+
+const PAYMENT_BADGE = {
+  paid:    { label: 'PAID',    color: '#22c55e' },
+  created: { label: 'UNPAID',  color: '#eab308' },
+  failed:  { label: 'FAILED',  color: '#ef4444' },
+  unpaid:  { label: 'UNPAID',  color: '#eab308' },
+  refunded:{ label: 'REFUNDED',color: '#a855f7' },
 }
 
 // ── Status selector ────────────────────────────────────────────────────────────
@@ -44,7 +53,7 @@ function StatusSelect({ order, onUpdated }) {
           cursor: 'pointer', outline: 'none', textTransform: 'capitalize',
         }}
       >
-        {STATUSES.map(s => <option key={s} value={s} style={{ background: '#111118', color: '#e2e8f0', textTransform: 'capitalize' }}>{s}</option>)}
+        {STATUSES.map(s => <option key={s} value={s} style={{ background: '#111118', color: '#e2e8f0', textTransform: 'capitalize' }}>{s.replace('_', ' ')}</option>)}
       </select>
       {saved && <span style={{ color: '#22c55e', fontSize: '0.75rem' }}>✓</span>}
       {saving && <span style={{ width: 12, height: 12, border: '2px solid rgba(99,102,241,0.3)', borderTop: '2px solid #6366f1', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.8s linear infinite' }} />}
@@ -73,6 +82,10 @@ function OrderRow({ order, onUpdated }) {
         </td>
         <td style={{ padding: '1rem 1.25rem', fontSize: '0.875rem', fontWeight: 700, color: '#e2e8f0' }}>
           {formatINR(order.total)}
+          {order.payment_method === 'razorpay' && (() => {
+            const pb = PAYMENT_BADGE[order.payment_status] || PAYMENT_BADGE.unpaid
+            return <div style={{ fontSize: '0.65rem', fontWeight: 800, color: pb.color, letterSpacing: '0.05em', marginTop: 2 }}>● {pb.label}</div>
+          })()}
         </td>
         <td style={{ padding: '1rem 1.25rem' }} onClick={e => e.stopPropagation()}>
           <StatusSelect order={order} onUpdated={onUpdated} />
@@ -109,9 +122,19 @@ function OrderRow({ order, onUpdated }) {
                 <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.5rem' }}>Payment</div>
                 <div style={{ fontSize: '0.85rem', color: '#94a3b8', lineHeight: 1.6 }}>
                   Method: {order.payment_method}<br />
+                  {order.payment_method === 'razorpay' && (
+                    <>
+                      Status: <strong style={{ color: (PAYMENT_BADGE[order.payment_status] || PAYMENT_BADGE.unpaid).color }}>{(PAYMENT_BADGE[order.payment_status] || PAYMENT_BADGE.unpaid).label}</strong><br />
+                      {order.razorpay_payment_id && <>Payment ID: <code style={{ fontSize: '0.75rem' }}>{order.razorpay_payment_id}</code><br /></>}
+                      {order.razorpay_order_id && <>RZP Order: <code style={{ fontSize: '0.75rem' }}>{order.razorpay_order_id}</code><br /></>}
+                      {order.paid_at && <>Paid at: {new Date(order.paid_at).toLocaleString('en-IN')}<br /></>}
+                    </>
+                  )}
                   Subtotal: {formatINR(order.subtotal)}<br />
                   {order.discount_amount > 0 && <>Discount: -{formatINR(order.discount_amount)}<br /></>}
+                  {Number(order.shipping_cost) > 0 && <>Shipping ({order.shipping_method}): +{formatINR(order.shipping_cost)}<br /></>}
                   <strong style={{ color: '#e2e8f0' }}>Total: {formatINR(order.total)}</strong>
+                  {order.gst_number && <><br />GST: {order.gst_number}{order.company_name ? ` (${order.company_name})` : ''}</>}
                 </div>
               </div>
             </div>
