@@ -35,10 +35,11 @@ export default function DesignEnquiry() {
 
   // Inject model-viewer for 3D preview
   useEffect(() => {
-    if (!document.querySelector('script[src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.5.0/model-viewer.min.js"]')) {
+    const scriptSrc = 'https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js';
+    if (!document.querySelector(`script[src="${scriptSrc}"]`)) {
       const script = document.createElement('script')
       script.type = 'module'
-      script.src = 'https://ajax.googleapis.com/ajax/libs/model-viewer/3.5.0/model-viewer.min.js'
+      script.src = scriptSrc
       document.head.appendChild(script)
     }
   }, [])
@@ -352,11 +353,12 @@ export default function DesignEnquiry() {
                   }}>
                     <model-viewer
                       src={generatedModel.glb}
-                      auto-rotate
-                      camera-controls
+                      auto-rotate="true"
+                      camera-controls="true"
+                      ar="true"
                       shadow-intensity="1"
                       exposure="1"
-                      style={{ width: '100%', height: '100%', backgroundColor: '#09090b' }}
+                      style={{ width: '100%', height: '100%', backgroundColor: '#09090b', display: 'block' }}
                     ></model-viewer>
                   </div>
 

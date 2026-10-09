@@ -1604,7 +1604,26 @@ h1, h2, h3, h4, h5, h6 {
 
 /* ============================================================ RESPONSIVE */
 @media (max-width: 1024px) {
-  /* Keep hero 2-column — only collapse grids that are genuinely wide */
+  /* Prevent horizontal overflow */
+  html, body { overflow-x: hidden; }
+
+  /* Navbar goes mobile on tablets */
+  .navbar__nav { display: none; }
+  .navbar__actions-desktop { display: none; }
+  .navbar__mobile-controls { display: flex; }
+  .navbar__menu-btn { display: flex; }
+
+  /* Hero collapses to single column on tablets */
+  .hero { grid-template-columns: 1fr; padding-top: 120px; gap: var(--space-12); }
+  .hero__visual { height: 400px; }
+  .hero__model-container { width: 380px; height: 380px; }
+  
+  /* Sections collapse earlier for tablet orientation */
+  .philosophy__inner { grid-template-columns: 1fr; gap: var(--space-12); }
+  .checkout__grid { grid-template-columns: 1fr; }
+  .checkout__summary-panel { position: static; order: -1; }
+
+  /* Collapse grids that are genuinely wide */
   .shop__grid { grid-template-columns: repeat(2, 1fr); }
   .capabilities__grid { grid-template-columns: repeat(2, 1fr); }
   .workflow__steps { grid-template-columns: repeat(3, 1fr); gap: var(--space-8); }
@@ -1616,29 +1635,8 @@ h1, h2, h3, h4, h5, h6 {
   .section-header { flex-direction: column; align-items: flex-start; gap: var(--space-4); }
 }
 
-@media (max-width: 768px) {
-  /* Hero collapses to single column on real tablets/mobile */
-  .hero { grid-template-columns: 1fr; padding-top: 120px; gap: var(--space-12); }
-  .hero__visual { height: 400px; }
-  .hero__model-container { width: 380px; height: 380px; }
-  .philosophy__inner { grid-template-columns: 1fr; gap: var(--space-12); }
-
-  /* Checkout: stack to single column on tablet */
-  .checkout__grid { grid-template-columns: 1fr; }
-  .checkout__summary-panel { position: static; order: -1; }
-}
-
 @media (max-width: 640px) {
   :root { --space-32: 5rem; }
-
-  /* Navbar goes mobile only on real phones/small tablets */
-  .navbar__nav { display: none; }
-  .navbar__actions-desktop { display: none; }
-  .navbar__mobile-controls { display: flex; }
-  .navbar__menu-btn { display: flex; }
-
-  /* Prevent horizontal overflow */
-  html, body { overflow-x: hidden; }
 
   .hero { padding-top: 100px; min-height: auto; padding-bottom: var(--space-12); }
   .hero__headline { font-size: 2.5rem; }
