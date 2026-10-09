@@ -33,7 +33,10 @@ export function createMeshyHandler({ apiKey, fetchImpl = fetch } = {}) {
     // The legacy name keeps existing Vercel environment settings compatible.
     // Neither variable is referenced by the browser bundle.
     const key = apiKey || process.env.MESHY_API_KEY || process.env.VITE_MESHY_API_KEY
-    if (!key) return json(res, 503, { message: 'Meshy server API key is not configured.' })
+    if (!key) {
+      console.error('Meshy server API key is missing for this deployment environment.')
+      return json(res, 503, { code: 'MESHY_NOT_CONFIGURED', message: '3D generation is temporarily unavailable. Please contact our team.' })
+    }
     const headers = { Authorization: `Bearer ${key}` }
 
     try {
