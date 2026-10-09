@@ -2,6 +2,7 @@ import React, { useState, useRef, useCallback, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../supabase'
 import ModelPreview from '../components/ModelPreview'
+import { PENDING_MODEL_KEY, SAVED_MODEL_KEY, readModelState, saveModelState, requestModel } from '../lib/modelGeneration'
 
 /* ── helpers ────────────────────────────────────────────────── */
 async function toGenerationImage(file) {
@@ -41,15 +42,87 @@ export default function DesignEnquiry() {
   // idle | submitting | polling | success | error
   const [status,   setStatus]   = useState('idle') 
   
-  const [modal,    setModal]    = useState(null)    // null | '3d_model' | 'enquire'
+  const [modal,    setModal]    = useState(null)    // null | loading | 3d_model | enquire | error
   const [errMsg,   setErrMsg]   = useState('')
   const [pollingInfo, setPollingInfo] = useState(null)
-  const [generatedModel, setGeneratedModel] = useState(null)
-  const [modelThumbnail, setModelThumbnail] = useState(null)
+  const [savedModel] = useState(() => readModelState(localStorage, SAVED_MODEL_KEY))
+  const [generatedModel, setGeneratedModel] = useState(savedModel?.model_urls || null)
+  const [modelThumbnail, setModelThumbnail] = useState(savedModel?.thumbnail_url || null)
 
   const fileRef = useRef()
-  const pollRef = useRef(null)
-  useEffect(() => () => clearInterval(pollRef.current), [])
+  const pollingStateRef = useRef({ run: 0, timeout: null })
+  const pendingTaskRef = useRef(null)
+
+  const startPolling = useCallback((task) => {
+    const polling = pollingStateRef.current
+    clearTimeout(polling.timeout)
+    const run = ++polling.run
+    pendingTaskRef.current = task
+    saveModelState(sessionStorage, PENDING_MODEL_KEY, task)
+    setStatus('polling')
+    setModal('loading')
+    setErrMsg('')
+    setPollingInfo({ progress: 0, status: 'PENDING' })
+
+    const check = async () => {
+      try {
+        const result = await requestModel(`/api/meshy?task=${encodeURIComponent(task.taskId)}`)
+        if (run !== polling.run) return
+        if (result.status === 'SUCCEEDED') {
+          pendingTaskRef.current = null
+          saveModelState(sessionStorage, PENDING_MODEL_KEY, null)
+          const completed = {
+            taskId: task.taskId, model_urls: result.model_urls || {},
+            thumbnail_url: result.thumbnail_url || null,
+          }
+          saveModelState(localStorage, SAVED_MODEL_KEY, completed)
+          saveModelState(localStorage, 'kaizen_3d_generated', true)
+          setGeneratedModel(completed.model_urls)
+          setModelThumbnail(completed.thumbnail_url)
+          setStatus('success')
+          setModal('3d_model')
+          setForm(INITIAL)
+          setImages(previous => {
+            previous.forEach(image => URL.revokeObjectURL(image.preview))
+            return []
+          })
+          // Only completed generations count toward the email/phone limit.
+          if (task.enquiry) {
+            const { error } = await supabase.from('design_enquiries').insert([task.enquiry])
+            if (error) console.error('Could not save completed generation:', error)
+          }
+          return
+        }
+        if (['FAILED', 'CANCELED'].includes(result.status)) {
+          pendingTaskRef.current = null
+          saveModelState(sessionStorage, PENDING_MODEL_KEY, null)
+          throw new Error(result.task_error?.message || 'Model generation failed. Please try again with your reference image.')
+        }
+        setPollingInfo({ progress: result.progress || 0, status: result.status || 'PENDING' })
+        polling.timeout = setTimeout(check, 5000)
+      } catch (error) {
+        if (run !== polling.run) return
+        if (error.status === 404) {
+          pendingTaskRef.current = null
+          saveModelState(sessionStorage, PENDING_MODEL_KEY, null)
+        }
+        setStatus('error')
+        setErrMsg(error.message)
+        setModal('error')
+      }
+    }
+    check()
+  }, [])
+
+  useEffect(() => {
+    const polling = pollingStateRef.current
+    const pending = readModelState(sessionStorage, PENDING_MODEL_KEY)
+    if (pending?.taskId) startPolling(pending)
+    return () => {
+      clearTimeout(polling.timeout)
+      polling.run++
+    }
+  }, [startPolling])
 
   /* form change */
   const change = (e) => setForm(p => ({ ...p, [e.target.name]: e.target.value }))
@@ -82,24 +155,28 @@ export default function DesignEnquiry() {
 
   /* submit handler */
   const submit = async (type) => {
+    if (status === 'submitting' || status === 'polling') return
+    if (type === '3d_model' && pendingTaskRef.current) {
+      startPolling(pendingTaskRef.current)
+      return
+    }
     if (!form.name || !form.email || !form.phone) return
     if (type === '3d_model' && images.length === 0) {
       setErrMsg("Please upload at least one reference image to generate a 3D model.");
       setStatus('error');
+      setModal('error');
       return;
     }
 
     if (type === '3d_model') setModal('loading');
-    setStatus('submitting'); setErrMsg(''); setPollingInfo(null); setGeneratedModel(null);
-    setModelThumbnail(null)
+    setStatus('submitting'); setErrMsg(''); setPollingInfo(null);
     try {
       // 0. Prevent duplicate free generations based on Email, Phone, or Browser Memory
       if (type === '3d_model') {
-        if (localStorage.getItem('kaizen_3d_generated')) {
-          setErrMsg("You have already used your 1 free 3D generation from this browser. If you need a custom design, please click 'Enquire Only'.");
-          setStatus('error');
-          setModal(null);
-          return;
+        if (generatedModel) {
+          setStatus('success')
+          setModal('3d_model')
+          return
         }
 
         const { data: hasUsed, error: checkErr } = await supabase.rpc('has_used_free_generation', {
@@ -109,17 +186,23 @@ export default function DesignEnquiry() {
 
         if (checkErr) {
           console.error("RPC Error:", checkErr);
+          if (localStorage.getItem('kaizen_3d_generated')) {
+            throw new Error('We could not verify your previous generation. Please try again or contact our team.')
+          }
           // Fallback if the RPC isn't created yet, we allow it but log error
         } else if (hasUsed) {
           localStorage.setItem('kaizen_3d_generated', 'true'); // Sync browser memory
           setErrMsg("You have already used your 1 free 3D generation. If you need a custom design, please click 'Enquire Only'.");
           setStatus('error');
-          setModal(null);
+          setModal('error');
           return;
+        } else {
+          // Re-check legacy flags: the old flow also set them for failed attempts.
+          saveModelState(localStorage, 'kaizen_3d_generated', null)
         }
       }
 
-      // 1. Save to Supabase
+      // Save the enquiry once the requested action has completed.
       const payload = {
         request_type: type === '3d_model' ? '3D Model Generation (Meshy)' : 'Design Enquiry',
         name:        form.name,
@@ -133,13 +216,10 @@ export default function DesignEnquiry() {
         description: form.description
       }
 
-      const { error } = await supabase.from('design_enquiries').insert([payload])
-      if (error) throw error
-
       // 2. Meshy Workflow
       if (type === '3d_model') {
         // Create Task using the FIRST image
-        const createRes = await fetch('/api/meshy', {
+        const { result: taskId } = await requestModel('/api/meshy', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
@@ -149,48 +229,12 @@ export default function DesignEnquiry() {
           })
         })
         
-        if (!createRes.ok) {
-          const errData = await createRes.json()
-          throw new Error(errData.message || 'Failed to start Meshy task')
-        }
-        
-        const { result: taskId } = await createRes.json()
-        
-        setStatus('polling')
-        setPollingInfo({ progress: 0, status: 'PENDING' })
-
-        // Poll Task every 5 seconds
-        const poll = setInterval(async () => {
-          try {
-            const pollRes = await fetch(`/api/meshy?task=${encodeURIComponent(taskId)}`)
-            const pollData = await pollRes.json()
-            if (!pollRes.ok) throw new Error(pollData.message || 'Unable to check model generation status')
-            
-            if (pollData.status === 'SUCCEEDED') {
-              clearInterval(poll)
-              setGeneratedModel(pollData.model_urls || {})
-              setModelThumbnail(pollData.thumbnail_url || null)
-              setStatus('success')
-              setModal('3d_model')
-              localStorage.setItem('kaizen_3d_generated', 'true') // Set browser memory flag
-              setForm(INITIAL)
-              setImages([])
-            } else if (pollData.status === 'FAILED') {
-              clearInterval(poll)
-              throw new Error(pollData.task_error?.message || 'Meshy 3D generation failed')
-            } else {
-              setPollingInfo({ progress: pollData.progress || 0, status: pollData.status })
-            }
-          } catch (e) {
-            clearInterval(poll)
-            setStatus('error')
-            setErrMsg(e.message)
-            setModal(null)
-          }
-        }, 5000)
-        pollRef.current = poll
+        if (typeof taskId !== 'string' || !taskId) throw new Error('The model server did not return a task. Please try again.')
+        startPolling({ taskId, enquiry: payload })
 
       } else {
+        const { error } = await supabase.from('design_enquiries').insert([payload])
+        if (error) throw error
         // Regular Enquiry flow - Send Email Notification
         const web3Key = import.meta.env.VITE_WEB3FORMS_KEY;
         if (web3Key) {
@@ -228,11 +272,15 @@ export default function DesignEnquiry() {
       console.error(err)
       setStatus('error')
       setErrMsg(err.message)
-      setModal(null)
+      setModal('error')
     }
   }
 
-  const closeModal = () => { setModal(null); setStatus('idle') }
+  const closeModal = () => {
+    if (modal === 'loading') return
+    setModal(null)
+    setStatus('idle')
+  }
 
   /* ── render ─────────────────────────────────────────────────── */
   return (
@@ -308,6 +356,21 @@ export default function DesignEnquiry() {
                     </div>
                   )}
                 </>
+              )}
+
+              {modal === 'error' && (
+                <div role="alert">
+                  <h2 style={{ fontSize: '1.5rem', color: '#F7F6F2', marginBottom: '1rem' }}>
+                    {pendingTaskRef.current ? 'Generation paused' : 'Unable to generate model'}
+                  </h2>
+                  <p style={{ color: '#f87171', lineHeight: 1.6, marginBottom: '1.5rem' }}>{errMsg}</p>
+                  {pendingTaskRef.current && (
+                    <button type="button" onClick={() => startPolling(pendingTaskRef.current)} style={{
+                      background: '#3A6FF7', color: '#fff', border: 'none', borderRadius: 8,
+                      padding: '0.75rem 1.25rem', marginBottom: '1.5rem', cursor: 'pointer', fontWeight: 700,
+                    }}>Resume generation</button>
+                  )}
+                </div>
               )}
 
               {/* If it's just a regular enquiry */}
@@ -416,6 +479,20 @@ export default function DesignEnquiry() {
           </p>
         </motion.div>
 
+        {pendingTaskRef.current && !modal && (
+          <div style={{
+            padding: '1rem 1.5rem', borderRadius: 12, marginBottom: '2rem',
+            background: 'rgba(58,111,247,0.1)', border: '1px solid rgba(58,111,247,0.3)',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem',
+          }}>
+            <p style={{ color: '#F7F6F2', margin: 0 }}>Your generation is waiting to resume.</p>
+            <button type="button" onClick={() => startPolling(pendingTaskRef.current)} style={{
+              background: '#3A6FF7', color: '#fff', border: 'none', borderRadius: 8,
+              padding: '0.6rem 1.2rem', fontWeight: 600, cursor: 'pointer',
+            }}>Resume generation</button>
+          </div>
+        )}
+
         {/* ── Persistent Session Model Banner ── */}
         {generatedModel && !modal && (
           <motion.div
@@ -429,7 +506,7 @@ export default function DesignEnquiry() {
           >
             <div>
               <h3 style={{ color: '#F7F6F2', fontSize: '1rem', margin: '0 0 0.25rem 0' }}>✨ Your 3D Model is ready!</h3>
-              <p style={{ color: '#A7ADB5', fontSize: '0.85rem', margin: 0 }}>You generated a model during this session.</p>
+              <p style={{ color: '#A7ADB5', fontSize: '0.85rem', margin: 0 }}>Your saved model is available to view and download.</p>
             </div>
             <button
               type="button"

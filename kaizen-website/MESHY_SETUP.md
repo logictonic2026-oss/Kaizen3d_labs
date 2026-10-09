@@ -28,3 +28,22 @@ Meshy has deleted. Downloads remain available for formats returned by the task.
 
 The viewer changes and API route require a new deployment; an older deployment
 continues using direct Meshy requests.
+
+## Failed attempts and recovery
+
+Errors remain visible in a dialog. If a status check fails, **Resume generation**
+checks the existing task again; it does not create another task. Pending task
+information stays in session storage for page reloads in the same tab. Completed
+model links stay in local storage and can be reopened after a refresh.
+
+Generation enquiries are now inserted only after Meshy returns `SUCCEEDED`.
+Earlier versions inserted enquiries before generation and could incorrectly
+count a failed attempt toward the free-generation limit.
+
+To repair an existing affected account, run `supabase/recover-failed-generation.sql`
+in the Supabase SQL Editor. Its active statements update the quota function to
+ignore records marked `generation_failed`. Review the affected user's records
+against Meshy's task history, then use the commented UPDATE example with the
+exact ID of a confirmed failed attempt. Successful attempts continue to count.
+The browser rechecks older quota flags against this function when no saved model
+is available, so clearing browser storage is not required after the account reset.
