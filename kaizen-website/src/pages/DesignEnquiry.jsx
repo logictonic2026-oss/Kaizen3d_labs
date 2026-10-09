@@ -1,15 +1,30 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../supabase'
+import ModelPreview from '../components/ModelPreview'
 
 /* ── helpers ────────────────────────────────────────────────── */
-const toBase64 = (file) =>
-  new Promise((res, rej) => {
-    const r = new FileReader()
-    r.readAsDataURL(file)
-    r.onload  = () => res(r.result)
-    r.onerror = rej
-  })
+async function toGenerationImage(file) {
+  const bitmap = await createImageBitmap(file)
+  try {
+    const scale = Math.min(1, 2048 / Math.max(bitmap.width, bitmap.height))
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale))
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale))
+    const context = canvas.getContext('2d')
+    context.fillStyle = '#fff'
+    context.fillRect(0, 0, canvas.width, canvas.height)
+    context.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
+    // Keep the JSON upload below Vercel's request limit and normalize WEBP etc.
+    for (const quality of [0.9, 0.8, 0.7, 0.6]) {
+      const data = canvas.toDataURL('image/jpeg', quality)
+      if (data.length <= 3_800_000) return data
+    }
+    throw new Error('Please use a smaller reference image for 3D generation.')
+  } finally {
+    bitmap.close()
+  }
+}
 
 const INITIAL = {
   name: '', companyName: '', email: '', phone: '',
@@ -30,19 +45,11 @@ export default function DesignEnquiry() {
   const [errMsg,   setErrMsg]   = useState('')
   const [pollingInfo, setPollingInfo] = useState(null)
   const [generatedModel, setGeneratedModel] = useState(null)
+  const [modelThumbnail, setModelThumbnail] = useState(null)
 
   const fileRef = useRef()
-
-  // Inject model-viewer for 3D preview
-  useEffect(() => {
-    const scriptSrc = 'https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js';
-    if (!document.querySelector(`script[src="${scriptSrc}"]`)) {
-      const script = document.createElement('script')
-      script.type = 'module'
-      script.src = scriptSrc
-      document.head.appendChild(script)
-    }
-  }, [])
+  const pollRef = useRef(null)
+  useEffect(() => () => clearInterval(pollRef.current), [])
 
   /* form change */
   const change = (e) => setForm(p => ({ ...p, [e.target.name]: e.target.value }))
@@ -84,6 +91,7 @@ export default function DesignEnquiry() {
 
     if (type === '3d_model') setModal('loading');
     setStatus('submitting'); setErrMsg(''); setPollingInfo(null); setGeneratedModel(null);
+    setModelThumbnail(null)
     try {
       // 0. Prevent duplicate free generations based on Email, Phone, or Browser Memory
       if (type === '3d_model') {
@@ -111,13 +119,6 @@ export default function DesignEnquiry() {
         }
       }
 
-      const imgData = await Promise.all(
-        images.slice(0, 3).map(async (img) => ({
-          name: img.file.name,
-          data: await toBase64(img.file),
-        }))
-      )
-
       // 1. Save to Supabase
       const payload = {
         request_type: type === '3d_model' ? '3D Model Generation (Meshy)' : 'Design Enquiry',
@@ -137,19 +138,14 @@ export default function DesignEnquiry() {
 
       // 2. Meshy Workflow
       if (type === '3d_model') {
-        const meshyKey = import.meta.env.VITE_MESHY_API_KEY
-        if (!meshyKey) throw new Error('Meshy API key is missing. Add VITE_MESHY_API_KEY to your .env file.')
-
         // Create Task using the FIRST image
-        const createRes = await fetch('https://api.meshy.ai/openapi/v1/image-to-3d', {
+        const createRes = await fetch('/api/meshy', {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${meshyKey}`,
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            image_url: imgData[0].data,
-            enable_pbr: true
+            image_url: await toGenerationImage(images[0].file),
           })
         })
         
@@ -166,14 +162,14 @@ export default function DesignEnquiry() {
         // Poll Task every 5 seconds
         const poll = setInterval(async () => {
           try {
-            const pollRes = await fetch(`https://api.meshy.ai/openapi/v1/image-to-3d/${taskId}`, {
-              headers: { 'Authorization': `Bearer ${meshyKey}` }
-            })
+            const pollRes = await fetch(`/api/meshy?task=${encodeURIComponent(taskId)}`)
             const pollData = await pollRes.json()
+            if (!pollRes.ok) throw new Error(pollData.message || 'Unable to check model generation status')
             
             if (pollData.status === 'SUCCEEDED') {
               clearInterval(poll)
-              setGeneratedModel(pollData.model_urls)
+              setGeneratedModel(pollData.model_urls || {})
+              setModelThumbnail(pollData.thumbnail_url || null)
               setStatus('success')
               setModal('3d_model')
               localStorage.setItem('kaizen_3d_generated', 'true') // Set browser memory flag
@@ -189,8 +185,10 @@ export default function DesignEnquiry() {
             clearInterval(poll)
             setStatus('error')
             setErrMsg(e.message)
+            setModal(null)
           }
         }, 5000)
+        pollRef.current = poll
 
       } else {
         // Regular Enquiry flow - Send Email Notification
@@ -230,6 +228,7 @@ export default function DesignEnquiry() {
       console.error(err)
       setStatus('error')
       setErrMsg(err.message)
+      setModal(null)
     }
   }
 
@@ -346,25 +345,14 @@ export default function DesignEnquiry() {
                   </p>
                   
                   {/* Model Viewer Container */}
-                  <div style={{ 
-                    width: '100%', height: 400, background: '#09090b', 
-                    borderRadius: 16, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)',
-                    marginBottom: '1.5rem', position: 'relative'
-                  }}>
-                    <model-viewer
-                      src={generatedModel.glb}
-                      auto-rotate="true"
-                      camera-controls="true"
-                      ar="true"
-                      shadow-intensity="1"
-                      exposure="1"
-                      style={{ width: '100%', height: '100%', backgroundColor: '#09090b', display: 'block' }}
-                    ></model-viewer>
-                  </div>
+                  <ModelPreview
+                    src={generatedModel.glb || generatedModel.pre_remeshed_glb}
+                    poster={modelThumbnail}
+                  />
 
                   {/* Download Options */}
                   <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', flexWrap: 'wrap', marginBottom: '2rem' }}>
-                    {Object.entries(generatedModel).map(([format, url]) => (
+                    {Object.entries(generatedModel).filter(([, url]) => typeof url === 'string' && url.trim()).map(([format, url]) => (
                       <a 
                         key={format} 
                         href={url} 
